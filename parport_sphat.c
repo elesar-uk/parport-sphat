@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
+#include <linux/gpio/driver.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/parport.h>
@@ -32,6 +33,9 @@
 static struct parport *port;
 static int ack_irq;
 static bool ack_irq_en;
+static int global_offset;
+#define GPIO_TO_DESC(p) gpio_to_desc(global_offset + (p))
+#define GPIO_TO_IRQ(p)  gpio_to_irq(global_offset + (p))
 static struct gpio_desc *control_nstrobe;
 static struct gpio_desc *control_nautolf;
 static struct gpio_desc *control_init;
@@ -218,6 +222,12 @@ static void sphat_restore_state(struct parport *p, struct parport_state *s)
 	sphat_write_data(p, s->u.pc.ecr);
 }
 
+static int sphat_capture_offset(struct gpio_chip *chip, void *data)
+{
+	global_offset = chip->base;
+	return 1; /* Stop enumeration */
+}
+
 static struct parport_operations sphat_ops = {
 	/* SPP emulation entry points */
 	.write_data	= sphat_write_data,
@@ -258,8 +268,8 @@ static struct parport_operations sphat_ops = {
 
 static int __init parport_sphat_initialise(void)
 {
-	struct gpio_desc *detect = gpio_to_desc(HAT_DETECT);
-	struct gpio_desc *bidi = gpio_to_desc(HAT_CONTROL_BIDI);
+	struct gpio_desc *detect;
+	struct gpio_desc *bidi;
 	int olddir_detect, olddir_bidi;
 	int oldval_detect, oldval_bidi;
 	int whenhigh, whenlow;
@@ -280,6 +290,16 @@ static int __init parport_sphat_initialise(void)
 		return -EINVAL;
 	}
 
+	/* Prior to kernel 6.6 the pin offset was forced to 0 so global GPIO
+	 * pin numbers mapped directly to the Pi's port pin numbers, but this
+	 * was changed to make space for dynamic allocation.
+	 * Use a fake call to gpio_device_find() to capture the first chip as
+	 * as all our GPIO lines are on the 0th controller, then peep at the
+	 * chip structure and apply that offset to our descriptors.
+	 */
+	gpio_device_find(NULL, sphat_capture_offset);
+	detect = GPIO_TO_DESC(HAT_DETECT);
+	bidi = GPIO_TO_DESC(HAT_CONTROL_BIDI);
 	if ((detect == NULL) || (bidi == NULL)) {
 		printk(KERN_NOTICE "Cannot probe for SPHAT\n");
 		return -EINVAL;
@@ -315,24 +335,24 @@ static int __init parport_sphat_initialise(void)
 	}
 
 	/* Grab the IOs */
-	control_nstrobe = gpio_to_desc(HAT_CONTROL_NSTROBE);
-	control_nautolf = gpio_to_desc(HAT_CONTROL_NAUTOLF);
-	control_init = gpio_to_desc(HAT_CONTROL_INIT);
-	control_nselect = gpio_to_desc(HAT_CONTROL_NSELECT);
-	control_bidi = gpio_to_desc(HAT_CONTROL_BIDI);
+	control_nstrobe = GPIO_TO_DESC(HAT_CONTROL_NSTROBE);
+	control_nautolf = GPIO_TO_DESC(HAT_CONTROL_NAUTOLF);
+	control_init = GPIO_TO_DESC(HAT_CONTROL_INIT);
+	control_nselect = GPIO_TO_DESC(HAT_CONTROL_NSELECT);
+	control_bidi = GPIO_TO_DESC(HAT_CONTROL_BIDI);
 	for (i = 0; i < HAT_DATA_BITS; i++) {
-		databit[i] = gpio_to_desc(HAT_DATA_SHIFT + i);
+		databit[i] = GPIO_TO_DESC(HAT_DATA_SHIFT + i);
 		if (databit[i] != NULL) {
 			gpiod_direction_output(databit[i], 1);
 		} else {
 			dataok = false;
 		}
 	}
-	status_error = gpio_to_desc(HAT_STATUS_ERROR);
-	status_select = gpio_to_desc(HAT_STATUS_SELECT);
-	status_paperout = gpio_to_desc(HAT_STATUS_PAPEROUT);
-	status_ack = gpio_to_desc(HAT_STATUS_ACK);
-	status_nbusy = gpio_to_desc(HAT_STATUS_NBUSY);
+	status_error = GPIO_TO_DESC(HAT_STATUS_ERROR);
+	status_select = GPIO_TO_DESC(HAT_STATUS_SELECT);
+	status_paperout = GPIO_TO_DESC(HAT_STATUS_PAPEROUT);
+	status_ack = GPIO_TO_DESC(HAT_STATUS_ACK);
+	status_nbusy = GPIO_TO_DESC(HAT_STATUS_NBUSY);
 	if (status_error && status_select && status_paperout &&
 	    status_ack && status_nbusy &&
 	    dataok &&
@@ -364,7 +384,7 @@ static int __init parport_sphat_initialise(void)
 
 #if SPHAT_ACK_IRQ
 	/* Get on interrupt on rising edge of nACK */
-	ack_irq = gpio_to_irq(HAT_STATUS_ACK);
+	ack_irq = GPIO_TO_IRQ(HAT_STATUS_ACK);
 	err = 0;
 	if (ack_irq >= 0) {
 		err = request_irq(ack_irq, parport_irq_handler, 
