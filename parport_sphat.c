@@ -224,8 +224,15 @@ static void sphat_restore_state(struct parport *p, struct parport_state *s)
 
 static int sphat_capture_offset(struct gpio_chip *chip, void *data)
 {
-	global_offset = chip->base;
-	return 1; /* Stop enumeration */
+	struct device_node *np = chip->parent->of_node;
+	int match = of_property_match_string(np, "gpio-line-names", "GPIO5");
+
+	/* Latch on this chip if matching on string GPIO5 gave index 5 */
+	if (match == 5) {
+		global_offset = chip->base;
+		return 1; /* Stop enumeration */
+	}
+	return 0; /* Continue enumeration */
 }
 
 static struct parport_operations sphat_ops = {
@@ -293,9 +300,9 @@ static int __init parport_sphat_initialise(void)
 	/* Prior to kernel 6.6 the pin offset was forced to 0 so global GPIO
 	 * pin numbers mapped directly to the Pi's port pin numbers, but this
 	 * was changed to make space for dynamic allocation.
-	 * Use a fake call to gpio_device_find() to capture the first chip as
-	 * as all our GPIO lines are on the 0th controller, then peep at the
-	 * chip structure and apply that offset to our descriptors.
+	 * Use a fake call to gpio_device_find() to capture the chip which
+	 * our GPIO lines are on, then peep at the chip structure and apply
+	 * that offset to our descriptors.
 	 */
 	gpio_device_find(NULL, sphat_capture_offset);
 	detect = GPIO_TO_DESC(HAT_DETECT);
