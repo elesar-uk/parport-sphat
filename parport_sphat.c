@@ -222,7 +222,7 @@ static void sphat_restore_state(struct parport *p, struct parport_state *s)
 	sphat_write_data(p, s->u.pc.ecr);
 }
 
-static int sphat_capture_offset(struct gpio_chip *chip, void *data)
+static int sphat_capture_offset(struct gpio_chip *chip, const void *data)
 {
 	struct device_node *np = chip->parent->of_node;
 	int match = of_property_match_string(np, "gpio-line-names", "GPIO5");
@@ -324,12 +324,12 @@ static int __init parport_sphat_initialise(void)
 	whenlow = gpiod_get_value(detect);
 
 	/* Put the lines back */
-	if (olddir_detect == GPIOF_DIR_IN) {
+	if (olddir_detect == GPIOF_IN) {
 		gpiod_direction_input(detect);
 	} else {
 		gpiod_direction_output(detect, oldval_bidi);
 	}
-	if (olddir_bidi == GPIOF_DIR_IN) {
+	if (olddir_bidi == GPIOF_IN) {
 		gpiod_direction_input(bidi);
 	} else {
 		gpiod_direction_output(bidi, oldval_detect);

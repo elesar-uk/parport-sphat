@@ -47,7 +47,7 @@ By default, parallel port support is not enabled on the Raspberry Pi. To enable:
 When the interactive menu is displayed, enable the following 2 modules:
 
     Device Drivers > Parallel port support
-    Character Devices > Parallel printer support
+    Device Drivers > Character Devices > Parallel printer support
 
 by pressing 'M' next to the respective menu item.
 
